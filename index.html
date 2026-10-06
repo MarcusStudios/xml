@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Identificar NF do XML na planilha</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,29 +20,53 @@
 <p class="sub">Para cada XML, o app lê a chave de acesso e o valor total (vNF) e procura os dois na planilha. Nada sai do seu navegador.</p>
 
 <section class="panel">
-<h2>1. XMLs das notas</h2>
-<input type="file" id="xmlFiles" accept=".xml" multiple>
-<div class="info" id="xmlInfo"></div>
+<div class="panel-header">
+  <i class="ph ph-file-code"></i>
+  <h2>1. XMLs das notas</h2>
+</div>
+<label class="dropzone" id="dzXml">
+  <i class="ph ph-upload-simple"></i>
+  <span>Clique para selecionar ou arraste os XMLs aqui</span>
+  <input type="file" id="xmlFiles" accept=".xml" multiple hidden>
+</label>
+<div class="info" id="xmlInfo">Nenhum arquivo lido ainda.</div>
 </section>
 
 <section class="panel">
-<h2>2. Planilha</h2>
-<input type="file" id="sheetFile" accept=".xlsx,.xls,.csv">
+<div class="panel-header">
+  <i class="ph ph-file-xls"></i>
+  <h2>2. Planilha base</h2>
+</div>
+<label class="dropzone" id="dzSheet">
+  <i class="ph ph-upload-simple"></i>
+  <span>Clique para selecionar ou arraste a Planilha (.xlsx, .csv)</span>
+  <input type="file" id="sheetFile" accept=".xlsx,.xls,.csv" hidden>
+</label>
 <div class="grid" id="cfg" hidden>
 <div><label for="sSheet">Aba</label><select id="sSheet"></select></div>
 <div><label for="sKey">Coluna da chave de acesso</label><select id="sKey"></select></div>
 <div><label for="sVal">Coluna do valor total</label><select id="sVal"></select></div>
+<div><label for="sNum">Coluna Nº NF (opcional p/ match alternativo)</label><select id="sNum"></select></div>
 <div><label for="sCobr">Coluna tipo de cobrança (Opcional)</label><select id="sCobr"></select></div>
+<div>
+  <label for="sFiltro">Exibir no resultado:</label>
+  <select id="sFiltro">
+    <option value="ambas">Qualquer divergência (Valor ou CFOP)</option>
+    <option value="cfop">Apenas divergências de CFOP</option>
+    <option value="valor">Apenas divergências de Valor</option>
+    <option value="todas">Mostrar todas as notas (Sem filtro)</option>
+  </select>
+</div>
 <div><label for="tol">Tolerância no valor (R$)</label><input type="number" id="tol" value="0.01" step="0.01" min="0"></div>
 </div>
-<div class="info" id="shInfo"></div>
+<div class="info" id="shInfo">Nenhuma planilha lida.</div>
 <div class="err" id="err" role="alert"></div>
-<div class="row"><button id="run" disabled>Identificar notas</button><button class="sec" id="csv" disabled>Baixar CSV</button></div>
+<div class="row"><button id="run" disabled><i class="ph ph-play"></i> Identificar notas</button><button class="sec" id="csv" disabled><i class="ph ph-download-simple"></i> Baixar CSV</button></div>
 </section>
 
 <section class="panel" id="out" hidden>
 <div class="info" id="sum" style="margin:0 0 10px"></div>
-<div class="wrap"><table><thead><tr><th>Arquivo XML</th><th>Nº NF</th><th>Chave no XML</th><th>Valor no XML</th><th>Valor na planilha</th><th>Cobrança na Planilha</th><th>CFOP(s)</th><th>Tipo CFOP</th><th>Venda s/ Cobrança?</th><th>Resultado</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
 </section>
 </main>
 
