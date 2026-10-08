@@ -30,6 +30,7 @@
   <input type="file" id="xmlFiles" accept=".xml" multiple hidden>
 </label>
 <div class="info" id="xmlInfo">Nenhum arquivo lido ainda.</div>
+<div id="xmlReaderList" class="xml-list" hidden></div>
 </section>
 
 <section class="panel">
@@ -49,6 +50,11 @@
 <div><label for="sNum">Coluna Nº NF (opcional p/ match alternativo)</label><select id="sNum"></select></div>
 <div><label for="sCobr">Coluna tipo de cobrança (Opcional)</label><select id="sCobr"></select></div>
 <div><label for="tol">Tolerância no valor (R$)</label><input type="number" id="tol" value="0.01" step="0.01" min="0"></div>
+<div style="grid-column: 1 / -1;"><label for="isencoes">Termos de Isenção (separados por vírgula)</label><input type="text" id="isencoes" value="isento, isenção, cortesia, amostra, brinde, sem pagamento, sem valor, demonstração, doação, remessa, n/a, -, sem cobrança, bonifica, transf"></div>
+<div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;">
+  <input type="checkbox" id="emptyIsIsencao" style="width: auto;">
+  <label for="emptyIsIsencao" style="margin: 0; display: inline;">Tratar célula de cobrança vazia como isenção</label>
+</div>
 </div>
 <div class="info" id="shInfo">Nenhuma planilha lida.</div>
 <div class="err" id="err" role="alert"></div>
@@ -78,6 +84,21 @@
 <div class="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
 </section>
 </main>
+
+<div id="xmlModal" class="modal-wrap" hidden onclick="if(event.target.id === 'xmlModal') this.hidden = true">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modalTitle">Detalhes da NF</h2>
+      <div class="modal-tabs">
+        <button class="tab-btn active" onclick="switchModalTab('resumo')">Visualização DANFE</button>
+        <button class="tab-btn" onclick="switchModalTab('arvore')">XML Completo</button>
+      </div>
+      <button class="close-btn" onclick="document.getElementById('xmlModal').hidden = true"><i class="ph ph-x"></i></button>
+    </div>
+    <div class="modal-body" id="modalBodyResumo"></div>
+    <div class="modal-body" id="modalBodyArvore" hidden></div>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
