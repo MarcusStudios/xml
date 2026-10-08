@@ -116,6 +116,146 @@ function ready() { $('run').disabled = !(notes.length && wb && $('sKey').value);
 
 /* ---- Identificação ---- */
 let result = [];
+let currentFilter = 'todos';
+let currentSearch = '';
+let currentSort = { col: 'statusCode', asc: true };
+
+// Helper format functions
+const shortKey = k => {
+  if (!k) return '—';
+  const short = k.length === 44 ? '…' + k.slice(-6) : k;
+  return `<span title="${k}">${short}</span> <button class="copy-btn" onclick="navigator.clipboard.writeText('${k}')" title="Copiar chave"><i class="ph ph-copy"></i></button>`;
+};
+
+const formatStatus = s => {
+  const map = {
+    'ok': { l: 'Conferida', c: 'ok', i: 'check-circle' },
+    'aprox': { l: 'Aproximada', c: 'aprox', i: 'warning' },
+    'div': { l: 'Divergente', c: 'div', i: 'warning' },
+    'sugestao': { l: 'Sugestão', c: 'aprox', i: 'magnifying-glass' },
+    'nao': { l: 'Não encont.', c: 'nao', i: 'x-circle' }
+  };
+  const d = map[s] || map['nao'];
+  return `<span class="status-pill ${d.c}"><i class="ph ph-${d.i}"></i> ${d.l}</span>`;
+};
+
+const formatDiff = d => {
+  if (d === null || d === undefined) return '—';
+  if (Math.abs(d) < 0.01) return '—';
+  const val = brl(Math.abs(d));
+  if (d > 0) return `<span class="diff pos">+${val}</span>`;
+  return `<span class="diff neg">-${val}</span>`;
+};
+
+window.setFilter = function(f) {
+  currentFilter = f;
+  renderResumo();
+  renderTabela();
+};
+
+window.setSort = function(col) {
+  if (!col) return;
+  if (currentSort.col === col) {
+    currentSort.asc = !currentSort.asc;
+  } else {
+    currentSort.col = col;
+    currentSort.asc = true;
+  }
+  
+  result.sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (va === null || va === undefined) va = '';
+    if (vb === null || vb === undefined) vb = '';
+    
+    if (typeof va === 'number' && typeof vb === 'number') {
+      return currentSort.asc ? va - vb : vb - va;
+    }
+    va = String(va).toLowerCase();
+    vb = String(vb).toLowerCase();
+    if (va < vb) return currentSort.asc ? -1 : 1;
+    if (va > vb) return currentSort.asc ? 1 : -1;
+    return 0;
+  });
+  
+  renderTabela();
+};
+
+function renderResumo() {
+  const counts = { todos: result.length, ok: 0, aprox: 0, div: 0, sugestao: 0, nao: 0 };
+  result.forEach(r => { counts[r.statusCode]++; });
+
+  const cardsHtml = `
+    <div class="card ${currentFilter === 'todos' ? 'active' : ''}" onclick="setFilter('todos')">
+      <div class="val">${counts.todos}</div>
+      <div class="lbl"><i class="ph ph-files"></i> Total</div>
+    </div>
+    <div class="card c-ok ${currentFilter === 'ok' ? 'active' : ''}" onclick="setFilter('ok')">
+      <div class="val">${counts.ok}</div>
+      <div class="lbl"><i class="ph ph-check-circle"></i> Conferida</div>
+    </div>
+    <div class="card c-div ${currentFilter === 'div' ? 'active' : ''}" onclick="setFilter('div')">
+      <div class="val">${counts.div}</div>
+      <div class="lbl"><i class="ph ph-warning"></i> Divergente</div>
+    </div>
+    <div class="card c-nao ${currentFilter === 'nao' ? 'active' : ''}" onclick="setFilter('nao')">
+      <div class="val">${counts.nao}</div>
+      <div class="lbl"><i class="ph ph-x-circle"></i> Não enc.</div>
+    </div>
+    <div class="card c-aprox ${currentFilter === 'aprox' ? 'active' : ''}" onclick="setFilter('aprox')">
+      <div class="val">${counts.aprox + counts.sugestao}</div>
+      <div class="lbl"><i class="ph ph-magnifying-glass"></i> Aprox. / Sug.</div>
+    </div>
+  `;
+  $('sumCards').innerHTML = cardsHtml;
+}
+
+function renderTabela() {
+  let filtered = result.filter(r => {
+    if (currentFilter === 'aprox') return r.statusCode === 'aprox' || r.statusCode === 'sugestao';
+    if (currentFilter !== 'todos' && r.statusCode !== currentFilter) return false;
+    
+    if (currentSearch) {
+      const q = currentSearch.toLowerCase();
+      return (r.nNF && r.nNF.toLowerCase().includes(q)) || 
+             (r.chave && r.chave.includes(q)) || 
+             (r.file && r.file.toLowerCase().includes(q));
+    }
+    return true;
+  });
+
+  $('tCount').textContent = `Exibindo ${filtered.length} de ${result.length}`;
+
+  const activeCols = [
+    { label: 'Status', val: r => formatStatus(r.statusCode), sort: 'statusCode' },
+    { label: 'NF', val: r => `<div>${esc(r.nNF) || '—'}</div><span class="text-sec" title="${esc(r.file)}">${esc(r.file).length > 20 ? esc(r.file).slice(0, 17) + '...' : esc(r.file)}</span>`, sort: 'nNF' },
+    { label: 'Chave', val: r => shortKey(r.chave), sort: 'chave' },
+    { label: 'Valor XML', val: r => brl(r.valor), isNum: true, sort: 'valor' },
+    { label: 'Valor Pl.', val: r => brl(r.vp), isNum: true, sort: 'vp' },
+    { label: 'Δ', val: r => formatDiff(r.diff), isNum: true, sort: 'diff' },
+    { label: 'Cobrança', val: r => esc(r.cp) || '—', sort: 'cp' },
+    { label: 'CFOP(s)', val: r => `<div title="${esc(r.cfopsType)}">${esc(r.cfopsStr)}</div>`, sort: 'cfopsStr' },
+    { label: 'Tipo Div.', val: r => r.tipoDiv ? `<span style="color:var(--warn); font-weight:500">${esc(r.tipoDiv)}</span>` : '—', sort: 'tipoDiv' },
+    { label: 'Motivos', val: r => `<div class="badges-wrap">${r.motivos.map(m => `<span class="badge ${r.statusCode === 'div' ? 'warn' : ''}">${esc(m)}</span>`).join('')}</div>` }
+  ];
+
+  $('th').innerHTML = `<tr>${activeCols.map(c => `<th onclick="${c.sort ? `setSort('${c.sort}')` : ''}">${c.label} ${currentSort.col === c.sort ? (currentSort.asc ? '▴' : '▾') : ''}</th>`).join('')}</tr>`;
+  
+  if (filtered.length === 0) {
+    $('tb').innerHTML = `<tr><td colspan="${activeCols.length}" style="text-align:center; padding: 32px; color: var(--muted)">Nenhuma nota encontrada para este filtro.</td></tr>`;
+    return;
+  }
+
+  $('tb').innerHTML = filtered.map(r => {
+    return `<tr class="s-${r.statusCode === 'sugestao' ? 'aprox' : r.statusCode}">` + activeCols.map(c => {
+      let classes = [];
+      if (c.isNum) classes.push('n');
+      if (c.sort === 'chave') classes.push('k');
+      const clsAttr = classes.length ? ` class="${classes.join(' ')}"` : '';
+      return `<td${clsAttr}>${c.val(r)}</td>`;
+    }).join('') + `</tr>`;
+  }).join('');
+}
+
 $('run').onclick = async () => {
   await withLoad('Cruzando dados...', async () => {
     const kc = $('sKey').value, vc = $('sVal').value, cc = $('sCobr').value, numc = $('sNum').value, tol = Number($('tol').value) || 0;
@@ -126,153 +266,337 @@ $('run').onclick = async () => {
       nNF: numc ? String(r[numc] ?? '').trim() : ''
     }));
     const short = list.filter(r => r.chave && r.chave.length !== 44).length;
-    $('err').textContent = short ? `Atenção: ${short} chave(s) da planilha não têm 44 dígitos (o Excel pode ter corrompido). Usaremos Nº + Valor como alternativa, se possível.` : '';
+    
+    if (short) {
+      $('outErr').textContent = `Atenção: ${short} chave(s) da planilha não têm 44 dígitos (o Excel pode ter corrompido). Usaremos Nº + Valor como alternativa, se possível.`;
+      $('outErr').hidden = false;
+    } else {
+      $('outErr').hidden = true;
+    }
+
     result = notes.map(n => {
-      let hit = n.chave && list.find(r => r.chave === n.chave);
+      let hits = n.chave ? list.filter(r => r.chave === n.chave) : [];
       let matchAlternativo = false;
 
-      // 3. Fallback: Casamento por Nº da NF + Valor (Fase 3)
-      if (!hit && n.nNF && n.valor !== null && numc) {
-        const alt = list.find(r => {
-           // Checa se o número consta na coluna e o valor bate (com tolerância)
-           const eqNum = r.nNF && r.nNF.includes(n.nNF);
-           const eqVal = r.val !== null && Math.abs(r.val - n.valor) <= tol;
-           return eqNum && eqVal;
-        });
-        if (alt) {
-           hit = alt;
-           matchAlternativo = true;
+      if (hits.length === 0 && n.nNF && n.valor !== null && numc) {
+        const alts = list.filter(r => r.nNF && r.nNF.includes(n.nNF));
+        if (alts.length > 0) {
+           const sumAlts = alts.reduce((sum, r) => sum + (r.val || 0), 0);
+           const eqVal = n.valor !== null && Math.abs(sumAlts - n.valor) <= tol;
+           if (eqVal) {
+             hits = alts;
+             matchAlternativo = true;
+           } else {
+             const altSingle = alts.find(r => r.val !== null && Math.abs(r.val - n.valor) <= tol);
+             if (altSingle) {
+               hits = [altSingle];
+               matchAlternativo = true;
+             }
+           }
         }
       }
 
-      let st, cls, vp = hit ? hit.val : null, cp = hit ? hit.cobranca : '';
-      let isDivValor = false, isDivCfop = false;
-      let motivos = [];
+      let vp = null, cp = '';
+      let statusCode = '', diff = null, motivos = [], tipoDiv = '';
 
-      if (hit) {
-        // 1. Checagem de Valor
+      if (hits.length > 0) {
+        vp = hits.reduce((sum, r) => sum + (r.val || 0), 0);
+        
+        const cobrancas = hits.map(r => r.cobranca).filter(c => c).map(c => c.trim());
+        const uniqueCobrancas = [...new Set(cobrancas)];
+        cp = uniqueCobrancas.join(' / ');
+        
+        if (n.valor !== null && vp !== null) {
+          diff = n.valor - vp;
+        }
+
+        let isDivValor = false, isDivCfop = false;
+        let erros = [];
+
         const okValor = n.valor !== null && vp !== null && Math.abs(n.valor - vp) <= tol;
         if (!okValor) {
           isDivValor = true;
-          motivos.push('Valor diverge');
+          erros.push('Valor diverge');
         }
 
-        // 2. Validação Cruzada: CFOP x Cobrança (Fase 1)
-        const cpStr = String(cp).toLowerCase().trim();
-        const isSemCobrancaTxt = !cpStr || cpStr === 'sem cobrança' || cpStr.includes('bonifica') || cpStr.includes('transf');
+        const isencoesTxt = ['sem cobrança', 'bonifica', 'transf'];
+        const isIsencao = txt => !txt || isencoesTxt.some(i => txt.includes(i));
         
+        const hasIsencao = cobrancas.length === 0 || cobrancas.some(c => isIsencao(c.toLowerCase()));
+        const hasCobrancaNormal = cobrancas.some(c => !isIsencao(c.toLowerCase()));
+
         if (n.cfopsType.includes('Venda')) {
           if (n.vendaSemCobranca === 'Sim') {
              isDivCfop = true;
-             motivos.push('XML Venda sem cobrança (ou tPag=90)');
-          } else if (isSemCobrancaTxt) {
+             erros.push('Erro no XML: O CFOP é de Venda, mas a nota foi emitida como "Sem Pagamento"');
+          } else if (!hasCobrancaNormal) {
              isDivCfop = true;
-             motivos.push(`Venda, mas planilha informa: ${cp || 'Vazio'}`);
+             erros.push(`Incompatível: O XML é de Venda, mas a planilha não informa forma de pagamento (Consta: ${cp || 'Vazio'})`);
           }
-        } else if (n.cfopsType.includes('Bonificação')) {
-          if (!isSemCobrancaTxt) {
+        } 
+        
+        if (n.cfopsType.includes('Bonificação')) {
+          if (!hasIsencao) {
             isDivCfop = true;
-            motivos.push(`Bonificação com cobrança na planilha (${cp})`);
+            erros.push(`Incompatível: O XML é de Bonificação, mas a planilha aponta que há cobrança (Consta: ${cp})`);
           }
-        } else if (n.cfopsType.includes('Transferência')) {
-          if (!isSemCobrancaTxt) {
+        } 
+        
+        if (n.cfopsType.includes('Transferência')) {
+          if (!hasIsencao) {
             isDivCfop = true;
-            motivos.push(`Transferência com cobrança na planilha (${cp})`);
+            erros.push(`Incompatível: O XML é de Transferência, mas a planilha aponta que há cobrança (Consta: ${cp})`);
           }
         }
 
-        if (motivos.length === 0) {
-          st = matchAlternativo ? 'Identificada por Nº+Valor: sem divergências' : 'Identificada: sem divergências'; 
-          cls = matchAlternativo ? 'warn' : 'ok';
+        if (isDivValor && isDivCfop) tipoDiv = 'Valor e CFOP';
+        else if (isDivValor) tipoDiv = 'Valor';
+        else if (isDivCfop) tipoDiv = 'CFOP';
+
+        if (erros.length === 0) {
+          statusCode = matchAlternativo ? 'aprox' : 'ok';
+          if (hits.length > 1) motivos.push(`Agrupou ${hits.length} linhas da planilha`);
         } else {
-          st = motivos.join(' | ') + (matchAlternativo ? ' (Match aproximado)' : ''); 
-          cls = 'warn';
+          statusCode = 'div';
+          if (matchAlternativo) erros.push('Match aproximado (Nº+Valor)');
+          if (hits.length > 1) erros.push(`Agrupou ${hits.length} linhas da planilha`);
+          motivos.push(...erros);
         }
       } else {
-        isDivValor = true;
         const c = n.valor === null ? [] : list.filter(r => r.val !== null && Math.abs(r.val - n.valor) <= tol);
-        if (c.length) { st = `Chave não encontrada, mas há valor igual em ${c.length} linha(s)`; cls = 'warn'; }
-        else { st = 'Não identificada na planilha'; cls = 'bad'; }
+        if (c.length) { 
+          statusCode = 'sugestao'; 
+          motivos.push(`Há ${c.length} linha(s) com valor igual na planilha`);
+        }
+        else { 
+          statusCode = 'nao'; 
+          motivos.push('Não encontrada');
+        }
       }
-      return {...n, vp, cp, st, cls, isDivValor, isDivCfop};
+      return {...n, vp, cp, statusCode, diff, motivos, tipoDiv};
     });
-    const c = k => result.filter(r => r.cls === k).length;
     
-    const filtro = $('sFiltro').value;
-    const divergentes = result.filter(r => {
-      if (filtro === 'todas') return true;
-      if (filtro === 'cfop') return r.isDivCfop;
-      if (filtro === 'valor') return r.isDivValor;
-      return r.isDivValor || r.isDivCfop;
-    });
+    // Reset filters and configure initial view
+    currentFilter = 'todos';
+    currentSearch = '';
+    $('tSearch').value = '';
 
-    const filtroTexto = {
-      'ambas': 'Exibindo apenas notas com divergências (Valor ou CFOP).',
-      'cfop': 'Exibindo apenas notas com divergências de CFOP.',
-      'valor': 'Exibindo apenas notas com divergências de Valor.',
-      'todas': 'Exibindo todas as notas (sem filtros).'
-    }[filtro];
-
-    $('sum').innerHTML = `<strong>Resumo:</strong> ${c('ok')} certas, ${c('warn')} com divergência, ${c('bad')} não encontradas.<br><span style="color:var(--warn);margin-top:4px;display:block"><i class="ph ph-funnel"></i> ${filtroTexto} (${divergentes.length} notas na tabela)</span>`;
-    
-    const activeCols = [
-      { label: 'Arquivo XML', show: true, val: r => esc(r.file) },
-      { label: 'Nº NF', show: true, val: r => esc(r.nNF) },
-      { label: 'Chave no XML', show: true, val: r => esc(r.chave) || '—', isKey: true },
-      { label: 'Valor XML', show: filtro !== 'cfop', val: r => brl(r.valor), isNum: true },
-      { label: 'Valor planilha', show: filtro !== 'cfop', val: r => brl(r.vp), isNum: true },
-      { label: 'Cobrança Planilha', show: filtro !== 'valor', val: r => esc(r.cp) || '—' },
-      { label: 'CFOP(s)', show: filtro !== 'valor', val: r => esc(r.cfopsStr), isKey: true },
-      { label: 'Tipo CFOP', show: filtro !== 'valor', val: r => esc(r.cfopsType) },
-      { label: 'Venda s/ Cobrança?', show: filtro !== 'valor', val: r => r.vendaSemCobranca === 'Sim' ? `<span class="badge warn">⚠️ Sim</span>` : `<span style="color:var(--muted)">Não</span>` },
-      { label: 'Resultado', show: true, val: r => esc(r.st), isResult: true }
-    ].filter(c => c.show);
-
-    $('th').innerHTML = `<tr>${activeCols.map(c => `<th>${c.label}</th>`).join('')}</tr>`;
-    
-    $('tb').innerHTML = divergentes.map(r => {
-      return `<tr>` + activeCols.map(c => {
-        let classes = [];
-        if (c.isNum) classes.push('n');
-        if (c.isKey) classes.push('k');
-        if (c.isResult) classes.push(r.cls);
-        const clsAttr = classes.length ? ` class="${classes.join(' ')}"` : '';
-        return `<td${clsAttr}>${c.val(r)}</td>`;
-      }).join('') + `</tr>`;
-    }).join('');
+    setSort('statusCode');
+    renderResumo();
+    renderTabela();
     
     $('out').hidden = false; $('csv').disabled = false;
+    
+    // Scroll smoothly to output
+    setTimeout(() => {
+      $('out').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   });
 };
+
+$('tSearch').oninput = (e) => {
+  currentSearch = e.target.value;
+  renderTabela();
+};
+
+$('pdf').onclick = () => {
+  if (!window.pdfMake) {
+    alert("Erro ao carregar a biblioteca pdfMake.");
+    return;
+  }
+  
+  let filtered = result.filter(r => {
+    if (currentFilter === 'aprox') return r.statusCode === 'aprox' || r.statusCode === 'sugestao';
+    if (currentFilter !== 'todos' && r.statusCode !== currentFilter) return false;
+    
+    if (currentSearch) {
+      const qs = currentSearch.toLowerCase();
+      return (r.nNF && r.nNF.toLowerCase().includes(qs)) || 
+             (r.chave && r.chave.includes(qs)) || 
+             (r.file && r.file.toLowerCase().includes(qs));
+    }
+    return true;
+  });
+
+  const totalXmls = notes.length;
+  const totalDivs = result.filter(r => r.statusCode === 'div' || r.statusCode === 'nao').length;
+  const totalOks = result.filter(r => r.statusCode === 'ok').length;
+
+  const mapFiltro = {
+    'todos': 'Todas as notas',
+    'ok': 'Apenas Conferidas',
+    'div': 'Apenas Divergentes',
+    'nao': 'Não encontradas',
+    'aprox': 'Aproximadas / Sugestões'
+  };
+
+  const getStatusObj = (status) => {
+    if (status === 'ok') return { text: '✓ OK', color: '#1f7a45', bold: true, fontSize: 8 };
+    if (status === 'div') return { text: '⚠️ Divergente', color: '#b4521a', bold: true, fontSize: 8 };
+    if (status === 'nao') return { text: '✖ Não Enc.', color: '#a8323a', bold: true, fontSize: 8 };
+    if (status === 'aprox') return { text: 'Aprox.', color: '#b08605', bold: true, fontSize: 8 };
+    return { text: 'Sugestão', color: '#b08605', bold: true, fontSize: 8 };
+  };
+
+  const tableBody = [
+    [
+      { text: 'Status', style: 'th' },
+      { text: 'NF', style: 'th' },
+      { text: 'Chave', style: 'th' },
+      { text: 'Val XML', style: 'th' },
+      { text: 'Val Plan.', style: 'th' },
+      { text: 'Diferença', style: 'th' },
+      { text: 'CFOP/Op.', style: 'th' },
+      { text: 'Cobrança', style: 'th' },
+      { text: 'Tipo Div', style: 'th' },
+      { text: 'Motivos', style: 'th' }
+    ]
+  ];
+
+  filtered.forEach(r => {
+    const diffVal = r.diff !== null && Math.abs(r.diff) >= 0.01;
+    const diffStr = diffVal ? ((r.diff > 0 ? '+' : '-') + brl(Math.abs(r.diff))) : '—';
+    const diffColor = diffVal ? '#b4521a' : '#000000';
+    const diffBold = diffVal;
+
+    const tipoDivColor = r.tipoDiv ? '#b4521a' : '#000000';
+    
+    tableBody.push([
+      getStatusObj(r.statusCode),
+      { text: r.nNF || '—', fontSize: 8 },
+      { text: r.chave ? (r.chave.length === 44 ? '...' + r.chave.slice(-6) : r.chave) : '—', fontSize: 8 },
+      { text: r.valor !== null ? brl(r.valor) : '', fontSize: 8 },
+      { text: r.vp !== null ? brl(r.vp) : '', fontSize: 8 },
+      { text: diffStr, color: diffColor, bold: diffBold, fontSize: 8 },
+      { text: r.cfopsStr || '—', fontSize: 8 },
+      { text: r.cp || '—', fontSize: 8 },
+      { text: r.tipoDiv || '—', color: tipoDivColor, bold: r.tipoDiv !== '', fontSize: 8 },
+      { text: r.motivos.join('\n'), fontSize: 8, color: (r.statusCode === 'div' || r.statusCode === 'nao') ? '#b4521a' : '#000000' }
+    ]);
+  });
+
+  if (filtered.length === 0) {
+    tableBody.push([{ text: 'Nenhuma nota encontrada para o filtro atual.', colSpan: 10, alignment: 'center', margin: [0, 10, 0, 10] }, {}, {}, {}, {}, {}, {}, {}, {}, {}]);
+  }
+
+  var docDefinition = {
+    pageOrientation: 'landscape',
+    pageSize: 'A4',
+    pageMargins: [ 20, 30, 20, 30 ],
+    content: [
+      { text: 'Relatório de Cruzamento e Auditoria: XML x Planilha', style: 'header' },
+      {
+        columns: [
+          {
+            width: '*',
+            text: [
+              { text: 'Resumo Geral\n', style: 'subheader' },
+              `Total de XMLs Analisados: ${totalXmls}\n`,
+              `Notas Conferidas (OK): ${totalOks}\n`,
+              { text: `Divergências ou Não Encontradas: ${totalDivs}\n`, color: totalDivs > 0 ? '#b4521a' : '#1f7a45', bold: true }
+            ]
+          },
+          {
+            width: '*',
+            text: [
+              { text: 'Filtro Atual do Relatório\n', style: 'subheader' },
+              `Exibindo: ${mapFiltro[currentFilter]}\n`,
+              `Total de notas nesta visão: ${filtered.length}\n`
+            ],
+            alignment: 'right'
+          }
+        ],
+        columnGap: 20,
+        margin: [0, 10, 0, 20]
+      },
+      {
+        table: {
+          headerRows: 1,
+          widths: ['auto', 'auto', 50, 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', '*'],
+          body: tableBody
+        },
+        layout: {
+          fillColor: function (rowIndex, node, columnIndex) {
+            return (rowIndex === 0) ? '#0f6b5c' : ((rowIndex % 2 === 0) ? '#f5f6f4' : null);
+          },
+          hLineWidth: function (i, node) {
+            return (i === 0 || i === node.table.body.length) ? 0 : 0.5;
+          },
+          vLineWidth: function (i, node) {
+            return 0;
+          },
+          hLineColor: function (i, node) {
+            return '#d9dfdb';
+          }
+        }
+      }
+    ],
+    styles: {
+      header: {
+        fontSize: 16,
+        bold: true,
+        color: '#0f6b5c',
+        margin: [0, 0, 0, 5]
+      },
+      subheader: {
+        fontSize: 12,
+        bold: true,
+        margin: [0, 0, 0, 5],
+        color: '#1b2421'
+      },
+      th: {
+        bold: true,
+        fontSize: 9,
+        color: 'white',
+        margin: [0, 4, 0, 4]
+      }
+    },
+    defaultStyle: {
+      font: 'Roboto',
+      fontSize: 10
+    }
+  };
+
+  pdfMake.createPdf(docDefinition).download('relatorio-auditoria-nf.pdf');
+};
+
 $('csv').onclick = () => {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   
-  const filtro = $('sFiltro').value;
-  const divergentes = result.filter(r => {
-    if (filtro === 'todas') return true;
-    if (filtro === 'cfop') return r.isDivCfop;
-    if (filtro === 'valor') return r.isDivValor;
-    return r.isDivValor || r.isDivCfop;
+  let filtered = result.filter(r => {
+    if (currentFilter === 'aprox') return r.statusCode === 'aprox' || r.statusCode === 'sugestao';
+    if (currentFilter !== 'todos' && r.statusCode !== currentFilter) return false;
+    
+    if (currentSearch) {
+      const qs = currentSearch.toLowerCase();
+      return (r.nNF && r.nNF.toLowerCase().includes(qs)) || 
+             (r.chave && r.chave.includes(qs)) || 
+             (r.file && r.file.toLowerCase().includes(qs));
+    }
+    return true;
   });
 
   const activeCols = [
-    { label: 'Arquivo XML', show: true, val: r => r.file },
-    { label: 'Nº NF', show: true, val: r => r.nNF },
-    { label: 'Chave no XML', show: true, val: r => r.chave || '—' },
-    { label: 'Valor XML', show: filtro !== 'cfop', val: r => r.valor },
-    { label: 'Valor planilha', show: filtro !== 'cfop', val: r => r.vp },
-    { label: 'Cobrança Planilha', show: filtro !== 'valor', val: r => r.cp },
-    { label: 'CFOP(s)', show: filtro !== 'valor', val: r => r.cfopsStr },
-    { label: 'Tipo CFOP', show: filtro !== 'valor', val: r => r.cfopsType },
-    { label: 'Venda s/ Cobrança?', show: filtro !== 'valor', val: r => r.vendaSemCobranca },
-    { label: 'Resultado', show: true, val: r => r.st }
-  ].filter(c => c.show);
+    { label: 'Status', csv: r => r.statusCode },
+    { label: 'NF', csv: r => r.nNF },
+    { label: 'Chave no XML', csv: r => r.chave || '—' },
+    { label: 'Valor XML', csv: r => r.valor },
+    { label: 'Valor planilha', csv: r => r.vp },
+    { label: 'Diferenca', csv: r => r.diff },
+    { label: 'Cobranca Planilha', csv: r => r.cp },
+    { label: 'CFOP(s)', csv: r => r.cfopsStr },
+    { label: 'Tipo CFOP', csv: r => r.cfopsType },
+    { label: 'Venda s/ Cobranca?', csv: r => r.vendaSemCobranca },
+    { label: 'Tipo Divergencia', csv: r => r.tipoDiv },
+    { label: 'Motivos', csv: r => r.motivos.join(' | ') }
+  ];
 
   const lines = [activeCols.map(c => q(c.label)).join(';')]
-    .concat(divergentes.map(r => activeCols.map(c => q(c.val(r))).join(';')));
+    .concat(filtered.map(r => activeCols.map(c => q(c.csv(r))).join(';')));
     
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\n')], {type: 'text/csv'}));
   a.download = 'identificacao-nf.csv'; a.click();
 };
+
 $('sKey').onchange = ready;

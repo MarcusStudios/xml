@@ -48,29 +48,40 @@
 <div><label for="sVal">Coluna do valor total</label><select id="sVal"></select></div>
 <div><label for="sNum">Coluna Nº NF (opcional p/ match alternativo)</label><select id="sNum"></select></div>
 <div><label for="sCobr">Coluna tipo de cobrança (Opcional)</label><select id="sCobr"></select></div>
-<div>
-  <label for="sFiltro">Exibir no resultado:</label>
-  <select id="sFiltro">
-    <option value="ambas">Qualquer divergência (Valor ou CFOP)</option>
-    <option value="cfop">Apenas divergências de CFOP</option>
-    <option value="valor">Apenas divergências de Valor</option>
-    <option value="todas">Mostrar todas as notas (Sem filtro)</option>
-  </select>
-</div>
 <div><label for="tol">Tolerância no valor (R$)</label><input type="number" id="tol" value="0.01" step="0.01" min="0"></div>
 </div>
 <div class="info" id="shInfo">Nenhuma planilha lida.</div>
 <div class="err" id="err" role="alert"></div>
-<div class="row"><button id="run" disabled><i class="ph ph-play"></i> Identificar notas</button><button class="sec" id="csv" disabled><i class="ph ph-download-simple"></i> Baixar CSV</button></div>
+<div class="row"><button id="run" disabled><i class="ph ph-play"></i> Identificar notas</button></div>
 </section>
 
 <section class="panel" id="out" hidden>
-<div class="info" id="sum" style="margin:0 0 10px"></div>
+<div class="panel-header" style="justify-content: space-between;">
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <i class="ph ph-list-checks" style="color:var(--accent)"></i>
+    <h2>3. Resultado</h2>
+  </div>
+  <div style="display: flex; gap: 8px;">
+    <button class="sec" id="csv"><i class="ph ph-file-csv"></i> CSV</button>
+    <button class="sec" id="pdf"><i class="ph ph-file-pdf"></i> PDF</button>
+  </div>
+</div>
+<div class="err" id="outErr" style="margin-bottom: 16px;" hidden></div>
+<div class="summary-cards" id="sumCards"></div>
+<div class="table-controls">
+  <div class="search-box">
+    <i class="ph ph-magnifying-glass"></i>
+    <input type="text" id="tSearch" placeholder="Buscar NF, chave ou arquivo...">
+  </div>
+  <div class="count" id="tCount"></div>
+</div>
 <div class="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
 </section>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
